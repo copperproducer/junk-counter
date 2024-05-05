@@ -33,8 +33,6 @@ def take_screenshot_and_visualize_slots():
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 def capture_screen_to_cv2():
-    #wait for the info to be displayed
-    time.sleep(0.1)
     screenshot = pyautogui.screenshot()
     screenshot_np = np.array(screenshot)  # Convert the PIL Image to a numpy array
     # Scale down to 1080p
