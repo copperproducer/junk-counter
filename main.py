@@ -48,7 +48,7 @@ def preprocess_image(image):
     height, width = gray.shape[:2]
 
     # Define the region of interest (ROI) for the trading area
-    roi_top = int(height * 0.5)
+    roi_top = int(height * 0.45)
     roi_bottom = int(height * 0.85)
 
     # Extract the ROI
@@ -112,6 +112,7 @@ class PrimeJunkApp:
 
         # Load slot positions from settings or set default values
         self.load_slot_positions()
+        self.last_scanned_time = 0
 
         # Price adjustment section
         self.price_labels = {}
@@ -222,17 +223,20 @@ class PrimeJunkApp:
     def periodic_scan(self):
         if self.active:
             mouse_over, slot_index = is_mouse_over_slot()
-            if mouse_over and slot_index not in self.scanned_slots:
-                screen_image = capture_screen_to_cv2()
-                ducat_value = find_ducat_value(screen_image)
-                if ducat_value is not None:
-                    self.scanned_slots.add(slot_index)  # Mark this slot as scanned
-                    self.update_slot_indicator(slot_index - 1, True)  # Update visual indicator
-                    platinum_value = self.ducat_to_platinum(ducat_value)
-                    self.total_platinum += platinum_value
-                    self.update_total_platinum_display()
-                    play_confirmation_sound()  # Play confirmation sound
-                    time.sleep(.1)  # Wait for a short duration to avoid value mixing
+            current_time = time.time()  # Capture the current time
+            if mouse_over:
+                if (current_time - self.last_scanned_time > 0.1):  # Check if the cooldown has elapsed
+                    if slot_index not in self.scanned_slots:
+                        screen_image = capture_screen_to_cv2()
+                        ducat_value = find_ducat_value(screen_image)
+                        if ducat_value is not None:
+                            self.scanned_slots.add(slot_index)  # Mark this slot as scanned
+                            self.update_slot_indicator(slot_index - 1, True)  # Update visual indicator
+                            platinum_value = self.ducat_to_platinum(ducat_value)
+                            self.total_platinum += platinum_value
+                            self.update_total_platinum_display()
+                            play_confirmation_sound()  # Play confirmation sound
+                            self.last_scan_time = current_time  # Update last scan time
             if len(self.scanned_slots) == 6:  # Check if all slots have been scanned
                 read_total_platinum(self.total_platinum)  # Read total platinum using text-to-speech
             self.master.after(1000 // self.polling_rate.get(), self.periodic_scan)
@@ -264,23 +268,6 @@ class PrimeJunkApp:
         self.scanned_slots_label.config(text=f"Scanned Slots: {scanned_slots_text}")
         self.total_platinum_label.config(text=f"Total Platinum: {self.total_platinum}")
 
-    def mute_sound(self):
-        # Mute the sound
-        winsound.Beep(0, 0)  # Just resetting the sound parameters to 0 will mute it
-
-    def mute_text_to_speech(self):
-        # Mute text-to-speech
-        engine = pyttsx3.init()
-        engine.setProperty('volume', 0)  # Set volume to 0 to mute
-
-    def unmute_sound(self):
-        # Unmute the sound
-        pass  # No need to unmute for system sound
-
-    def unmute_text_to_speech(self):
-        # Unmute text-to-speech
-        engine = pyttsx3.init()
-        engine.setProperty('volume', 1)  # Set volume back to 1 for normal volume
 
     def save_settings(self):
         for ducats in self.prices:
@@ -464,78 +451,3 @@ def update_slot_positions(start_x, start_y, slot_width, slot_height, gap_between
 root = tk.Tk()
 app = PrimeJunkApp(root)
 root.mainloop()
-
-
-
-
-# def find_ducat_icon(screen_image, ducat_icon):
-#     height, width, _ = screen_image.shape
-#     # Increase the cropped area to ensure we don't miss the text
-#     cropped_screen = screen_image[height//2 - 100:height + 100, 0:width]
-#
-#     sift = cv2.SIFT_create()
-#     keypoints1, descriptors1 = sift.detectAndCompute(ducat_icon, None)
-#     keypoints2, descriptors2 = sift.detectAndCompute(cropped_screen, None)
-#
-#     FLANN_INDEX_KDTREE = 1
-#     index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
-#     search_params = dict(checks=50)
-#
-#     flann = cv2.FlannBasedMatcher(index_params, search_params)
-#     matches = flann.knnMatch(descriptors1, descriptors2, k=2)
-#
-#     good_matches = [m for m, n in matches if m.distance < 0.7 * n.distance]
-#     MIN_MATCH_COUNT = 10
-#     if len(good_matches) > MIN_MATCH_COUNT:
-#         src_pts = np.float32([keypoints1[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
-#         dst_pts = np.float32([keypoints2[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
-#         M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
-#         h, w = ducat_icon.shape[:2]
-#         pts = np.float32([[0, 0], [0, h-1], [w-1, h-1], [w-1, 0]]).reshape(-1, 1, 2)
-#         dst = cv2.perspectiveTransform(pts, M)
-#         rect = cv2.boundingRect(dst)
-#         x, y, w, h = rect
-#         # Expand the ROI slightly to capture adjacent text
-#         roi = cropped_screen[y-100:y+h+100, x-100:x+w+100]
-#
-#         # Convert ROI to grayscale and enhance features
-#         roi_gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-#         roi_enhanced = cv2.equalizeHist(roi_gray)
-#
-#         # OCR with Tesseract
-#         custom_config = r'--oem 3 --psm 6'
-#         text = pytesseract.image_to_string(roi_enhanced, config=custom_config)
-#         ducat_amount = extract_ducat_value(text)
-#
-#         return screen_image, (int(x + w/2), int(y + h/2 + height//2)), ducat_amount
-#     else:
-#         print("Ducat icon not found. Matches found:", len(good_matches))
-#         return screen_image, None, None
-
-
-
-
-#
-#
-#
-#     # Capture the screen
-#
-# for i in range(10):
-#     screen_image = capture_screen_to_cv2()
-#
-#     # Load the ducat icon image
-#     ducat_icon = cv2.imread('ducat_icon.png')
-#
-#     # Find the ducat icon using the SIFT-based function
-#     result_image, found_location, match_count = find_ducat_icon(screen_image, ducat_icon)
-#
-#     if found_location:
-#         print("Ducat icon found at position:", found_location, "with", match_count, "good matches.")
-#         #cv2.imshow('Result with Debugging Visuals', result_image)
-#         cv2.waitKey(0)  # Wait for a key press to close the window
-#         cv2.destroyAllWindows()
-#     else:
-#         print("Ducat icon not found. Matches found:", match_count)
-#
-#
-
