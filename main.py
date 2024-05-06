@@ -33,7 +33,6 @@ def take_screenshot_and_visualize_slots():
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 def capture_screen_to_cv2():
-    time.sleep(0.1)
     screenshot = pyautogui.screenshot()
     screenshot_np = np.array(screenshot)  # Convert the PIL Image to a numpy array
     # Scale down to 1080p
@@ -403,6 +402,7 @@ class PrimeJunkApp:
         scanned_slots_text = ", ".join(map(str, self.scanned_slots)) if self.scanned_slots else "None"
         self.scanned_slots_label.config(text=f"Scanned Slots: {scanned_slots_text}")
         self.total_platinum_label.config(text=f"Total Platinum: {self.total_platinum}")
+        time.sleep(.1)
 
 def is_mouse_over_slot():
     mouse_x, mouse_y = pyautogui.position()
