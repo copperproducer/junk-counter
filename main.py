@@ -232,6 +232,7 @@ class PrimeJunkApp:
                     self.total_platinum += platinum_value
                     self.update_total_platinum_display()
                     play_confirmation_sound()  # Play confirmation sound
+                    time.sleep(.1)  # Wait for a short duration to avoid value mixing
             if len(self.scanned_slots) == 6:  # Check if all slots have been scanned
                 read_total_platinum(self.total_platinum)  # Read total platinum using text-to-speech
             self.master.after(1000 // self.polling_rate.get(), self.periodic_scan)
@@ -402,7 +403,7 @@ class PrimeJunkApp:
         scanned_slots_text = ", ".join(map(str, self.scanned_slots)) if self.scanned_slots else "None"
         self.scanned_slots_label.config(text=f"Scanned Slots: {scanned_slots_text}")
         self.total_platinum_label.config(text=f"Total Platinum: {self.total_platinum}")
-        time.sleep(.1)
+
 
 def is_mouse_over_slot():
     mouse_x, mouse_y = pyautogui.position()
