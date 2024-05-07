@@ -1,17 +1,25 @@
 import pytesseract
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'  # Update the path as per your installation
+import keyboard
+import pyttsx3
+import pytesseract
+import winsound
+import pyperclip
+import pandas as pd
 import tkinter as tk
 from tkinter import messagebox, font, simpledialog
 import pyautogui
 import cv2
-import pytesseract
 import numpy as np
 import json
-import keyboard
-import pyttsx3
-import winsound
 import threading
 import time
+import easyocr
+
+
+#is cuda available
+import torch
+print(f'CUDA available: {torch.cuda.is_available()}')
 
 def take_screenshot_and_visualize_slots():
     # Capture the screen
@@ -21,6 +29,17 @@ def take_screenshot_and_visualize_slots():
 
     # Get the scaled slot positions
     scaled_positions = get_scaled_positions()
+
+    #scale up scaled_positions by the necessary amount for the user's screen resolution
+    base_resolution = pyautogui.size()
+    target_resolution = (1920, 1080)  # New target resolution
+
+    scaled_positions = [
+        ((int(x1 * base_resolution[0] / target_resolution[0]), int(y1 * base_resolution[1] / target_resolution[1])),
+         (int(x2 * base_resolution[0] / target_resolution[0]), int(y2 * base_resolution[1] / target_resolution[1]))
+        )
+        for (x1, y1), (x2, y2) in scaled_positions
+    ]
 
     # Draw rectangles around the slots
     for (top_left, bottom_right) in scaled_positions:
@@ -36,8 +55,16 @@ def capture_screen_to_cv2():
     screenshot = pyautogui.screenshot()
     screenshot_np = np.array(screenshot)  # Convert the PIL Image to a numpy array
     # Scale down to 1080p
-    screenshot_np = cv2.resize(screenshot_np, (1600,900), interpolation=cv2.INTER_AREA)
+    screenshot_np = cv2.resize(screenshot_np, (1920,1080), interpolation=cv2.INTER_AREA)
     return cv2.cvtColor(screenshot_np, cv2.COLOR_RGB2BGR)  # Convert RGB to BGR for OpenCV
+
+
+def load_ducat_values():
+    try:
+        return pd.read_csv('ducat_values.csv', index_col='Part Name')
+    except FileNotFoundError:
+        return pd.DataFrame(columns=['Part Name', 'Value']).set_index('Part Name')
+
 
 
 def preprocess_image(image):
@@ -64,8 +91,73 @@ tts_lock = threading.Lock()
 # Create a flag to track whether the announcement has been made
 announcement_made = False
 
+
+import csv
+
+def read_ducat_values():
+    """Read ducat values from the CSV file."""
+    try:
+        with open('ducat_values.csv', mode='r', newline='', encoding='utf-8') as file:
+            reader = csv.DictReader(file)
+            return {row['Part Name'].lower(): int(row['Value']) for row in reader}
+    except FileNotFoundError:
+        return {}
+
+
+def take_screenshot():
+    screenshot = pyautogui.screenshot()
+    screenshot_np = np.array(screenshot)
+    screenshot_bgr = cv2.cvtColor(screenshot_np, cv2.COLOR_RGB2BGR)
+    return screenshot_bgr
+
+
+from cv2 import fastNlMeansDenoisingColored
+
+
+# Initialize the OCR reader with English language support
+reader = easyocr.Reader(['en'])
+def extract_and_format_part_name(part_name_image):
+    """Use EasyOCR to extract and format the part name from an image."""
+    results = reader.readtext(part_name_image, paragraph=True)  # Use paragraph mode for better context understanding
+    part_names = [text[1].lower() for text in results]  # Extract the text and convert to lowercase
+    formatted_text = ' '.join(part_names)  # Join part names into a single string
+    return formatted_text
+
+
+
+def capture_slot_image(self, slot_index):
+    """Capture the image of the bottom 40% of the specified slot."""
+    slot_positions = self.get_scaled_positions()
+    top_left, bottom_right = slot_positions[slot_index]
+    x1, y1, x2, y2 = *top_left, *bottom_right
+    height = y2 - y1
+    roi_top = y1 + int(height * 0.6)
+    roi_bottom = y2 - int(height)
+    screen_image = capture_screen_to_cv2()
+    return screen_image[roi_top:roi_bottom, x1:x2]
+
+
+
+
+
+from fuzzywuzzy import process
+
+def find_closest_match(part_name, known_parts):
+    """Find the closest match for a part name in known parts using fuzzy matching."""
+    if known_parts:
+        # Use fuzzy matching to find the closest match with a similarity score
+        result = process.extractOne(part_name, known_parts.keys(), score_cutoff=95)  # 80 is the similarity threshold
+        if result:
+            best_match, score = result
+            return best_match
+    return None
+
+
+
+
 def play_confirmation_sound():
     threading.Thread(target=winsound.Beep, args=(400, 100)).start()
+
 
 def read_total_platinum(total_platinum):
     threading.Thread(target=_read_total_platinum_thread, args=(total_platinum,)).start()
@@ -84,6 +176,7 @@ def _read_total_platinum_thread(total_platinum):
         finally:
             # Release the lock
             tts_lock.release()
+
 
 
 
@@ -112,7 +205,13 @@ class PrimeJunkApp:
 
         # Load slot positions from settings or set default values
         self.load_slot_positions()
-        self.last_scanned_time = 0
+        self.last_left_time = 0  # Track the last time the mouse left a slot
+        self.last_scanned_time = 0  # Track the last time a slot was scanned
+        self.last_mouse_slot = None  # No slot is selected initially
+        self.last_enter_time = 0  # Initialize the time the mouse entered a slot
+        self.last_preemptive_scan_time = 0  # Track the last preemptive scan time
+
+
 
         # Price adjustment section
         self.price_labels = {}
@@ -182,11 +281,13 @@ class PrimeJunkApp:
         self.toggle_button.pack(pady=10, padx=20, fill=tk.X)
 
         # Polling Rate Controls
-        self.polling_rate_label = tk.Label(master, text="Polling Rate (times per second):",
+        self.polling_rate_label = tk.Label(master, text="Polling Rate (mouse location checks per second):",
                                            font=self.font_style_label, bg='#333333', fg='white')
         self.polling_rate_label.pack()
         self.polling_rate = tk.Scale(master, from_=1, to=360, orient="horizontal", resolution=1,
                                      font=self.font_style_label, troughcolor="#555555", sliderlength=20, width=15)
+        self.polling_rate.set(360)  # Set default value
+
         self.polling_rate.pack(fill=tk.X, padx=20, pady=5)
 
         # Platinum Counter
@@ -200,6 +301,11 @@ class PrimeJunkApp:
                                       font=self.font_style_button, bg=button_bg, fg=button_fg)
         self.reset_button.pack(pady=10, padx=20, fill=tk.X)
 
+        self.clipboard_button = tk.Button(master, text="Copy Trade Message",
+                                          command=self.copy_trade_message_to_clipboard,
+                                          font=self.font_style_button, bg="#444444", fg="#FFFFFF")
+        self.clipboard_button.pack(pady=10, padx=20, fill=tk.X)
+
         # Bind the right Ctrl key to the reset_total method
         keyboard.on_press_key("right ctrl", self.reset_total)
 
@@ -207,11 +313,37 @@ class PrimeJunkApp:
 
         self.active = False
         self.scanned_slots = set()  # Track scanned slots to avoid multiple counts
+
+        # Preemptive Scan Interval Controls
+        self.preemptive_scan_interval_label = tk.Label(master, text="Automatic Scan Interval (seconds):",
+                                                       font=self.font_style_label, bg='#333333', fg='white')
+        self.preemptive_scan_interval_label.pack()
+        self.preemptive_scan_interval = tk.Scale(master, from_=0.1, to=10, orient="horizontal", resolution=0.1,
+                                                 font=self.font_style_label, troughcolor="#555555", sliderlength=20,
+                                                 width=15)
+        self.preemptive_scan_interval.set(1)  # Set default value
+        self.preemptive_scan_interval.pack(fill=tk.X, padx=20, pady=5)
+
+
+
+
+        self.allow_preemptive_scan = False  # Add this line
+
+    def set_color_filter(self, color):
+        self.color_filter = color
+        messagebox.showinfo("Color Set", f"Color set to {color}")
+
+
+
     def toggle(self):
         self.active = not self.active
         self.toggle_button.config(text="Deactivate" if self.active else "Activate")
+        self.allow_preemptive_scan = self.active  # Update this flag based on activity
         if self.active:
             self.periodic_scan()
+        else:
+            self.scanned_slots.clear()  # Optionally clear slots on deactivation
+
 
     def update_slot_indicator(self, index, scanned):
         """ Update the visual indicator for the given slot index """
@@ -220,26 +352,50 @@ class PrimeJunkApp:
         else:
             self.slot_indicators[index].config(bg='gray')
 
+    # Update the periodic_scan method
     def periodic_scan(self):
         if self.active:
+            current_time = time.time()
+            # Ensure only one preemptive scan runs, and only if allowed
+            if self.allow_preemptive_scan and (
+                    current_time - self.last_preemptive_scan_time > self.preemptive_scan_interval.get()):
+                self.preemptive_scan()
+                self.last_preemptive_scan_time = current_time
+
+            # Check if the mouse is over a slot
             mouse_over, slot_index = is_mouse_over_slot()
             current_time = time.time()  # Capture the current time
+
+            # Handling mouse and slot interaction
             if mouse_over:
-                if (current_time - self.last_scanned_time > 0.1):  # Check if the cooldown has elapsed
+                if self.last_mouse_slot != slot_index:
+                    self.last_mouse_slot = slot_index
+                    self.last_enter_time = current_time
+                # Scanning logic
+                elif slot_index == self.last_mouse_slot and (current_time - self.last_enter_time > 0.1):
                     if slot_index not in self.scanned_slots:
-                        screen_image = capture_screen_to_cv2()
-                        ducat_value = find_ducat_value(screen_image)
-                        if ducat_value is not None:
-                            self.scanned_slots.add(slot_index)  # Mark this slot as scanned
-                            self.update_slot_indicator(slot_index - 1, True)  # Update visual indicator
-                            platinum_value = self.ducat_to_platinum(ducat_value)
-                            self.total_platinum += platinum_value
-                            self.update_total_platinum_display()
-                            play_confirmation_sound()  # Play confirmation sound
-                            self.last_scan_time = current_time  # Update last scan time
-            if len(self.scanned_slots) == 6:  # Check if all slots have been scanned
-                read_total_platinum(self.total_platinum)  # Read total platinum using text-to-speech
+                        self.scan_slot(slot_index)
+
+            # Continue the periodic scan
             self.master.after(1000 // self.polling_rate.get(), self.periodic_scan)
+
+    def scan_slot(self, slot_index):
+        """ Function to handle the scanning of a specific slot. """
+        screen_image = capture_screen_to_cv2()
+        ducat_value = find_ducat_value(screen_image)
+        if ducat_value is not None:
+            self.update_platinum_and_slots(slot_index, ducat_value)
+        else:
+            # If ducat value is None, it's possible that the preemptive scan did not work correctly
+            # Attempt to scan again
+            part_name_image = capture_slot_image(slot_index)
+            part_name_text = extract_and_format_part_name(part_name_image)
+            closest_match = find_closest_match(part_name_text, read_ducat_values())
+            if closest_match:
+                self.update_platinum_and_slots(slot_index, read_ducat_values()[closest_match])
+            else:
+                # If still no match, keep slot in pending state
+                print(f"Failed to recognize slot {slot_index}. Please hover over again.")
 
     def reset_total(self, event=None):  # Add event=None parameter to accept event argument from keyboard event
         global announcement_made  # Use global to modify the flag
@@ -391,6 +547,60 @@ class PrimeJunkApp:
         self.scanned_slots_label.config(text=f"Scanned Slots: {scanned_slots_text}")
         self.total_platinum_label.config(text=f"Total Platinum: {self.total_platinum}")
 
+    def copy_trade_message_to_clipboard(self):
+        # Fetch prices from entries and sort by ducat value
+        price_data = {int(ducats): int(self.price_entries[ducats].get()) for ducats in self.prices}
+        sorted_prices = sorted(price_data.items(), key=lambda x: -x[0])  # Sort by ducat value in descending order
+
+        # Combine 15 and 25 ducat items if they have the same price
+        if price_data.get(15) == price_data.get(25):
+            price_data[25] = price_data[15]  # Combine under a single key
+            sorted_prices = [(k, v) for k, v in sorted_prices if k != 15]  # Remove the 15 entry from sorted list
+            sorted_prices = [(25, v) if k == 25 else (k, v) for k, v in sorted_prices]  # Replace 25 with "25/15"
+
+        # Build the trade message
+        message_parts = []
+        for ducats, platinum in sorted_prices:
+            if ducats == 25 and price_data.get(15) == price_data[25]:
+                message_parts.append(f"25/15:ducats:={platinum}:platinum:")
+            else:
+                message_parts.append(f"{ducats}:ducats:={platinum}:platinum:")
+        trade_message = f"WTB Prime Junk |{'|'.join(message_parts)}| Full Trades Only"
+
+        # Copy to clipboard
+        pyperclip.copy(trade_message)
+        #play confirmation sound
+        play_confirmation_sound()
+
+    def preemptive_scan(self):
+        """Modified preemptive scan using EasyOCR."""
+        ducat_values_df = load_ducat_values()
+        full_screen_image = capture_screen_to_cv2()
+        known_parts = read_ducat_values()  # Load known part values
+        for i, (top_left, bottom_right) in enumerate(get_scaled_positions(), start=1):
+            if i not in self.scanned_slots:
+                slot_image = full_screen_image[top_left[1]:bottom_right[1], top_left[0]:bottom_right[0]]
+                bottom_40_start = int(slot_image.shape[0] * 0.6)
+                part_name_image = slot_image[bottom_40_start:, :]
+                part_name_text = extract_and_format_part_name(part_name_image)
+                closest_match = find_closest_match(part_name_text, known_parts)
+                print(f"Slot {i}: {part_name_text} -> {closest_match}")
+                if closest_match:
+                    self.update_platinum_and_slots(i, known_parts[closest_match])
+
+    def update_platinum_and_slots(self, slot_index, ducat_value):
+        if slot_index not in self.scanned_slots:
+            self.scanned_slots.add(slot_index)
+            self.update_slot_indicator(slot_index - 1, True)
+            platinum_value = self.ducat_to_platinum(ducat_value)
+            self.total_platinum += platinum_value
+            self.update_total_platinum_display()
+            play_confirmation_sound()
+
+            # Check if all slots have been scanned and read total platinum aloud
+            if len(self.scanned_slots) == 6:  # Assuming there are 6 slots
+                read_total_platinum(self.total_platinum)
+
 
 def is_mouse_over_slot():
     mouse_x, mouse_y = pyautogui.position()
@@ -401,23 +611,30 @@ def is_mouse_over_slot():
     return False, None
 
 def get_slot_positions():
-    # Define top-left corner of the first slot
-    start_x = 218
-    start_y = 670  # Adjust this value if necessary to move up or down
-    slot_width = 220
-    slot_height = 220
-    gap_between_slots = 33
+    #get the actual screen resolution
+    base_resolution = pyautogui.size()
+    target_resolution = (1920, 1080)  # New target resolution
 
-    # Calculate positions for each slot
+    scale_x = target_resolution[0] / base_resolution[0]
+    scale_y = target_resolution[1] / base_resolution[1]
+
+    # Define the positions based on a 4K resolution
+    start_x = 218 * scale_x
+    start_y = 670 * scale_y
+    slot_width = 220 * scale_x
+    slot_height = 220 * scale_y
+    gap_between_slots = 33 * scale_x
+
     slot_positions = []
     for i in range(6):  # Assuming 6 slots
         top_left_x = start_x + i * (slot_width + gap_between_slots)
         top_left_y = start_y
         bottom_right_x = top_left_x + slot_width
         bottom_right_y = top_left_y + slot_height
-        slot_positions.append(((top_left_x, top_left_y), (bottom_right_x, bottom_right_y)))
+        slot_positions.append(((int(top_left_x), int(top_left_y)), (int(bottom_right_x), int(bottom_right_y))))
 
     return slot_positions
+
 
 def get_scaled_positions():
     screen_width, screen_height = pyautogui.size()
@@ -451,3 +668,5 @@ def update_slot_positions(start_x, start_y, slot_width, slot_height, gap_between
 root = tk.Tk()
 app = PrimeJunkApp(root)
 root.mainloop()
+
+
