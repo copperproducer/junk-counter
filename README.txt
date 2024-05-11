@@ -20,6 +20,10 @@ If it is lagging, don't click multiple times because it will remember that... ma
 
 polling rate is how often the location is checked for manual scanning. has minimal effect on performance.
 
+Startup takes a while
+
+Slot position settings might not save so remember what you put in. Try some testing to see what happens. Idk what happens.
+
 
 
 

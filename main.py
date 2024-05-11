@@ -15,11 +15,12 @@ import json
 import threading
 import time
 import easyocr
-
-
 #is cuda available
 import torch
 print(f'CUDA available: {torch.cuda.is_available()}')
+
+
+
 
 def take_screenshot_and_visualize_slots():
     # Capture the screen
@@ -125,16 +126,7 @@ def extract_and_format_part_name(part_name_image):
 
 
 
-def capture_slot_image(self, slot_index):
-    """Capture the image of the bottom 40% of the specified slot."""
-    slot_positions = self.get_scaled_positions()
-    top_left, bottom_right = slot_positions[slot_index]
-    x1, y1, x2, y2 = *top_left, *bottom_right
-    height = y2 - y1
-    roi_top = y1 + int(height * 0.6)
-    roi_bottom = y2 - int(height)
-    screen_image = capture_screen_to_cv2()
-    return screen_image[roi_top:roi_bottom, x1:x2]
+
 
 
 
@@ -379,23 +371,44 @@ class PrimeJunkApp:
             # Continue the periodic scan
             self.master.after(1000 // self.polling_rate.get(), self.periodic_scan)
 
+    def capture_slot_image(self, slot_index):
+        """Capture the image of the bottom 40% of the specified slot."""
+        slot_positions = get_scaled_positions()  # Corrected this line
+        top_left, bottom_right = slot_positions[slot_index]
+        x1, y1, x2, y2 = *top_left, *bottom_right
+        height = y2 - y1
+        roi_top = y1 + int(height * 0.6)
+        roi_bottom = y2 + int(height * 0.6)
+        screen_image = capture_screen_to_cv2()
+
+
+
+        return screen_image[roi_top:roi_bottom, x1:x2]
+
     def scan_slot(self, slot_index):
         """ Function to handle the scanning of a specific slot. """
-        screen_image = capture_screen_to_cv2()
-        ducat_value = find_ducat_value(screen_image)
-        if ducat_value is not None:
-            self.update_platinum_and_slots(slot_index, ducat_value)
-        else:
-            # If ducat value is None, it's possible that the preemptive scan did not work correctly
-            # Attempt to scan again
-            part_name_image = capture_slot_image(slot_index)
-            part_name_text = extract_and_format_part_name(part_name_image)
-            closest_match = find_closest_match(part_name_text, read_ducat_values())
-            if closest_match:
-                self.update_platinum_and_slots(slot_index, read_ducat_values()[closest_match])
+        try:
+            screen_image = capture_screen_to_cv2()
+            ducat_value = find_ducat_value(screen_image)
+            if ducat_value is not None:
+                self.update_platinum_and_slots(slot_index, ducat_value)
             else:
-                # If still no match, keep slot in pending state
-                print(f"Failed to recognize slot {slot_index}. Please hover over again.")
+                # If ducat value is None, it's possible that the preemptive scan did not work correctly
+                # Attempt to scan again
+                part_name_image = self.capture_slot_image(slot_index)  # Include self here
+                if part_name_image.size > 0:  # Check if the image is empty
+                    part_name_text = extract_and_format_part_name(part_name_image)
+                    closest_match = find_closest_match(part_name_text, read_ducat_values())
+                    if closest_match:
+                        self.update_platinum_and_slots(slot_index, read_ducat_values()[closest_match])
+                    else:
+                        # If still no match, keep slot in pending state
+                        print(f"Failed to recognize slot {slot_index}. Please hover over again.")
+                else:
+                    print(f"Slot {slot_index} image capture failed, possibly due to a size issue.")
+        except Exception as e:
+            # Log the exception for debugging
+            print(f"Error scanning slot {slot_index}: {e}")
 
     def reset_total(self, event=None):  # Add event=None parameter to accept event argument from keyboard event
         global announcement_made  # Use global to modify the flag
@@ -620,10 +633,10 @@ def get_slot_positions():
 
     # Define the positions based on a 4K resolution
     start_x = 218 * scale_x
-    start_y = 670 * scale_y
+    start_y = 675 * scale_y
     slot_width = 220 * scale_x
     slot_height = 220 * scale_y
-    gap_between_slots = 33 * scale_x
+    gap_between_slots = 34 * scale_x
 
     slot_positions = []
     for i in range(6):  # Assuming 6 slots
