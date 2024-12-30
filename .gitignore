@@ -1,0 +1,34 @@
+# Virtual environment
+.venv/
+
+# Python compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyz
+
+# macOS system file
+.DS_Store
+
+# Environment variables
+.env
+
+# Editor/IDE settings
+.vscode/
+.idea/
+.history
+
+# Build files
+dist/
+build/
+*.egg-info/
+
+# Other files
+*.exe
+*.xml
+*.spec
+.toc
+.pyz
+.html
+

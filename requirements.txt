@@ -1,0 +1,15 @@
+pytesseract
+keyboard
+pyttsx3
+pyperclip
+pandas
+tk
+pyautogui
+opencv-python
+numpy
+json5
+easyocr
+torch
+fuzzywuzzy
+selenium
+beautifulsoup4
