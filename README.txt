@@ -1,3 +1,6 @@
+Easy to Use Trading Pricing Tool
+
+
 USE THIS AT YOUR OWN RISK
 It is possible that this will set off scanners that will ban your account.
 This is mitigated by using only screenshots and no input automation.
