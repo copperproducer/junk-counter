@@ -21,11 +21,15 @@ from fuzzywuzzy import process
 # **Vertical Offset Factor**
 # Adjust this value to move the slots up or down.
 # Positive values move the slots down, negative values move them up.
+# This has been set to 0.7 to ensure that the scan slots scan successfully even when the text is moved due to edge cases such as set trades
 vertical_offset_factor = 0.7  # Default is 0.0 (no vertical adjustment)
 
 # **Slot Height Reduction Factor**
 # Adjust this value to change the height of the slots as a percentage of the original height.
+# This has been set to 0.6 to reduce CPU usage
 slot_height_reduction_factor = 0.6  # Default is 0.6 (60% of original height)
+
+# Enables buttons that allow you to see exactly what the OCR is seeing
 debug_mode = False
 def take_screenshot_and_visualize_slots():
     """
@@ -98,7 +102,6 @@ def read_ducat_values():
     except FileNotFoundError:
         return {}
 
-import re
 
 def extract_and_format_part_name(part_name_image):
     """Use EasyOCR to extract and format the part name from an image."""
@@ -157,7 +160,7 @@ def find_ducat_value(image):
     return extract_ducat_value(text)
 
 def extract_ducat_value(text):
-    import re
+    
     match = re.search(r'(\d+)\s*Ducats?', text)
     if match:
         return int(match.group(1))

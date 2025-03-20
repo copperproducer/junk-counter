@@ -1,58 +1,70 @@
 USE THIS AT YOUR OWN RISK
+It is possible that this will set off scanners that will ban your account.
+This is mitigated by using only screenshots and no input automation.
 
-Ask chatgpt for instructions if needed
-
-Install Tesseract on PC to your C drive
-The counter looks for 'C:\Program Files\Tesseract-OCR\tesseract.exe'
-
-Add tesseract to path
-
-install pytorch
-
-install CUDA Toolkit 12.3. and cuDNN library or whatever is up to date.
-to improve performance massively. 
-takes load off CPU and uses GPU efficiently instead.
-or don't to save about 500mb of RAM at the cost of big CPU usage
-
-To create the .exe,
-open pycharm
-open this folder as a project
-create a venv for this if necessary
-open main.py
-open terminal
-run:
-.\venv\Scripts\activate
-run:
-pip install -r requirements.txt
-test it by running the main.py file in pycharm
-run:
-pyinstaller --icon=ducat_icon.png --onefile --name="Prime Junk Counter" main.py
-it will take a while
-the .exe will be in the dist folder
-move the .exe to the main project folder (unknown if necessary)
-use shortcut to access .exe (preferred but possibly not necessary)
-or press windows key and search for prime junk counter after running .exe
-
-
-ctrl is reset counter
-
-If it is lagging, don't click multiple times because it will remember that... maybe
-
+This is a tool that allows you to instantly determine the value of a trade given the parts.
+Set your preferred values for the parts in the GUI.
+Click activate and the program will automatically tell you the value of the trade.
+This MASSIVELY speeds up trades and reduces mental strain.
 
 Startup takes a while
 
-Slot position settings might not save so remember what you put in. Try some testing to see what happens. Idk what happens.
-
-
-
-
+ctrl resets the pricing tool
 
 If you run the price extractor file, it will pull ducat values from the WF wiki.
-Know that some of the values are incorrect.
+Know that some of the values on the wiki are incorrect. Use warframe.market to know the correct values.
+Known incorrect values and their correct values:
+Limbo Prime Neuroptics: 100
+Rhino Prime Chassis: 65
+Gauss Prime Blueprint: 25
+
 Ducat values can be editted using MS Excel, Pycharm, or any other program that can edit CSV files.
 
-List of actual values for known incorrect values:
-Rhino Prime Chassis: 65
+
+
+
+
+
+
+Ask chatgpt for instructions if needed
+
+Instructions:
+Install Tesseract on PC to your C drive
+The tool looks for 'C:\Program Files\Tesseract-OCR\tesseract.exe'
+
+Add tesseract to path during install or add it manually later.
+
+Install CUDA Toolkit 12.3. and cuDNN library. Use the latest version of these if a new version is out.
+This is optional but improves performance massively. 
+It takes load off CPU and uses GPU instead, which is much faster.
+or don't do this to save about 500mb of RAM at the cost of big CPU usage.
+
+
+
+To create the .exe...
+
+Open pycharm or your preferred IDE
+Open this folder as a project
+Create a venv for this if necessary
+Open main.py
+Open terminal
+Run:
+.\venv\Scripts\activate
+Run:
+pip install -r requirements.txt
+pip install the appropriate and latest version of pytorch manually 
+Test the program by running the main.py file in pycharm
+Run:
+pyinstaller --onefile --name="Prime Junk Counter" main.py
+It will take a while
+The .exe will be in the dist folder
+Move the .exe to the main project folder (unknown if necessary)
+Use shortcut to access .exe (preferred but possibly not necessary)
+or press windows key and search for prime junk counter after running .exe
+
+
+
+
 
 
 
